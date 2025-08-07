@@ -1,174 +1,169 @@
 name: CI/CD Pipeline
 
+# **IMPORTANT:** These permissions enable GitHub Actions OIDC token usage for AWS role assumption
+permissions:
+  id-token: write
+  contents: read
+
 on:
   push:
     branches: [ "test" ]
 
 jobs:
+
   compile:
     runs-on: ec2-hosted
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-    - name: Install Dependencies
-      run: npm ci
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install Dependencies
+        run: npm ci
 
   security-check:
     runs-on: ec2-hosted
     needs: compile
     steps:
-    - uses: actions/checkout@v4
-    - name: Trivy FS Scan (via Docker)
-      run: |
-        docker run --rm \
-          -v $(pwd):/project \
-          aquasec/trivy fs /project
-    - name: Gitleaks Code Scan (via Docker)
-      run: |
-        docker run --rm \
-          -v $(pwd):/app \
-          zricethezav/gitleaks:latest detect \
-          --source=/app \
-          --report-format=json \
-          --report-path=/app/gitleaks-report.json
+      - uses: actions/checkout@v4
+      - name: Trivy FS Scan (via Docker)
+        run: |
+          docker run --rm -v $(pwd):/project aquasec/trivy fs /project
+      - name: Gitleaks Code Scan (via Docker)
+        run: |
+          docker run --rm -v $(pwd):/app zricethezav/gitleaks:latest detect --source=/app --report-format=json --report-path=/app/gitleaks-report.json
 
   test:
     runs-on: ec2-hosted
     needs: security-check
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-    - name: Install Dependencies
-      run: npm ci
-    - name: Run Unit Tests
-      run: npm test
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install Dependencies
+        run: npm ci
+      - name: Run Unit Tests
+        run: npm test
 
   sonar_scan:
     runs-on: ec2-hosted
     needs: test
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Configure AWS credentials for SonarQube secrets
-      uses: aws-actions/configure-aws-credentials@v3
-      with:
-        aws-region: ap-southeast-1
-        role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
+      - name: Configure AWS credentials for SonarQube secrets
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
 
-    - name: Get SonarQube secrets from AWS Secrets Manager
-      id: sonar_secrets
-      uses: aws-actions/aws-secretsmanager-get-secrets@v1
-      with:
-        secret-ids: |
-          SONAR_CREDENTIALS:nodejs-github-actions-1
-        parse-json-secrets: true
+      - name: Get SonarQube secrets from AWS Secrets Manager
+        id: sonar_secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@v1
+        with:
+          secret-ids: |
+            SONAR_CREDENTIALS:nodejs-github-actions-1
+          parse-json-secrets: true
 
-    - name: SonarQube Scan
-      uses: sonarsource/sonarqube-scan-action@master
-      with:
-        projectBaseDir: .
-      env:
-        SONAR_TOKEN: ${{ steps.sonar_secrets.outputs.SONAR_CREDENTIALS_SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ steps.sonar_secrets.outputs.SONAR_CREDENTIALS_SONAR_HOST_URL }}
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        with:
+          projectBaseDir: .
+        env:
+          SONAR_TOKEN: ${{ steps.sonar_secrets.outputs.SONAR_CREDENTIALS_SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ steps.sonar_secrets.outputs.SONAR_CREDENTIALS_SONAR_HOST_URL }}
 
-    - name: Install jq locally
-      run: |
-        curl -L -o jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
-        chmod +x jq
-        echo "$PWD" >> $GITHUB_PATH
+      - name: Install jq locally
+        run: |
+          curl -L -o jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
+          chmod +x jq
+          echo "$PWD" >> $GITHUB_PATH
 
-    - name: SonarQube Quality Gate
-      uses: sonarsource/sonarqube-quality-gate-action@master
-      with:
-        pollingTimeoutSec: 600
-      env:
-        SONAR_TOKEN: ${{ steps.sonar_secrets.outputs.SONAR_CREDENTIALS_SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ steps.sonar_secrets.outputs.SONAR_CREDENTIALS_SONAR_HOST_URL }}
+      - name: SonarQube Quality Gate
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        with:
+          pollingTimeoutSec: 600
+        env:
+          SONAR_TOKEN: ${{ steps.sonar_secrets.outputs.SONAR_CREDENTIALS_SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ steps.sonar_secrets.outputs.SONAR_CREDENTIALS_SONAR_HOST_URL }}
 
   docker_build_and_push:
     runs-on: ec2-hosted
     needs: sonar_scan
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Configure AWS credentials for DockerHub secrets
-      uses: aws-actions/configure-aws-credentials@v3
-      with:
-        aws-region: ap-southeast-1
-        role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
+      - name: Configure AWS credentials for DockerHub secrets
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
 
-    - name: Get DockerHub credentials from AWS Secrets Manager
-      id: dockerhub_secrets
-      uses: aws-actions/aws-secretsmanager-get-secrets@v1
-      with:
-        secret-ids: |
-          DOCKERHUB_CREDENTIALS:nodejs-github-actions-1
-        parse-json-secrets: true
+      - name: Get DockerHub credentials from AWS Secrets Manager
+        id: dockerhub_secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@v1
+        with:
+          secret-ids: |
+            DOCKERHUB_CREDENTIALS:nodejs-github-actions-1
+          parse-json-secrets: true
 
-    - name: Login to DockerHub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}
-        password: ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_password }}
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}
+          password: ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_password }}
 
-    - name: Build Docker Image with version tag
-      run: |
-        docker build -t ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest .
-        docker tag ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:${{ github.sha }}
+      - name: Build Docker Image with version tag
+        run: |
+          docker build -t ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest .
+          docker tag ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:${{ github.sha }}
 
-    - name: Trivy Image Scan
-      run: |
-        docker run --rm \
-          -v /var/run/docker.sock:/var/run/docker.sock \
-          aquasec/trivy image ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest
+      - name: Trivy Image Scan
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest
 
-    - name: Push Docker Image
-      run: |
-        docker push ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest
-        docker push ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:${{ github.sha }}
+      - name: Push Docker Image
+        run: |
+          docker push ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest
+          docker push ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:${{ github.sha }}
 
   deploy_to_ec2:
     runs-on: ubuntu-latest
     needs: docker_build_and_push
     steps:
-    - name: Configure AWS credentials for app secrets
-      uses: aws-actions/configure-aws-credentials@v3
-      with:
-        aws-region: ap-southeast-1
-        role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
+      - name: Configure AWS credentials for app secrets
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
 
-    - name: Get app secrets from AWS Secrets Manager
-      id: app_secrets
-      uses: aws-actions/aws-secretsmanager-get-secrets@v1
-      with:
-        secret-ids: |
-          APP_CREDENTIALS:nodejs-github-actions-1
-        parse-json-secrets: true
+      - name: Get app secrets from AWS Secrets Manager
+        id: app_secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@v1
+        with:
+          secret-ids: |
+            APP_CREDENTIALS:nodejs-github-actions-1
+          parse-json-secrets: true
 
-    - name: Add SSH private key
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
+      - name: Add SSH private key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
-    - name: Deploy to EC2 via SSH
-      env:
-        DB_URL: ${{ steps.app_secrets.outputs.APP_CREDENTIALS_DB_URL }}
-        API_KEY: ${{ steps.app_secrets.outputs.APP_CREDENTIALS_API_KEY }}
-      run: |
-        ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP }} "
-          docker pull ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest
-          docker stop nodeapp || true && docker rm nodeapp || true
-          docker run -d -p 3000:3000 \
-            --restart unless-stopped \
-            --name nodeapp \
-            -e DB_URL=\$DB_URL \
-            -e API_KEY=\$API_KEY \
-            ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest
-        "
+      - name: Deploy to EC2 via SSH
+        env:
+          DB_URL: ${{ steps.app_secrets.outputs.APP_CREDENTIALS_DB_URL }}
+          API_KEY: ${{ steps.app_secrets.outputs.APP_CREDENTIALS_API_KEY }}
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP }} "
+            docker pull ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest
+            docker stop nodeapp || true && docker rm nodeapp || true
+            docker run -d -p 3000:3000 --restart unless-stopped --name nodeapp \
+              -e DB_URL=\$DB_URL \
+              -e API_KEY=\$API_KEY \
+              ${{ steps.dockerhub_secrets.outputs.DOCKERHUB_CREDENTIALS_username }}/nodejs-cicd-app:latest
+          "
