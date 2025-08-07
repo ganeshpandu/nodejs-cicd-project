@@ -65,7 +65,7 @@ jobs:
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: |
-            SONAR_CREDENTIALS:nodejs-github-actions-1
+            SONAR_CREDENTIALS:nodejs_github_actions
           parse-json-secrets: true
 
       - name: SonarQube Scan
@@ -107,7 +107,7 @@ jobs:
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: |
-            DOCKERHUB_CREDENTIALS:nodejs-github-actions-1
+            DOCKERHUB_CREDENTIALS:nodejs_github_actions
           parse-json-secrets: true
 
       - name: Login to DockerHub
@@ -145,7 +145,7 @@ jobs:
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: |
-            APP_CREDENTIALS:nodejs-github-actions-1
+            APP_CREDENTIALS:nodejs_github_actions
           parse-json-secrets: true
 
       - name: Add SSH private key
