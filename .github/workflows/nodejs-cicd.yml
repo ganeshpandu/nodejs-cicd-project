@@ -71,7 +71,7 @@ jobs:
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: |
-            PIPELINE_SECRETS:nodejs_github_actions
+            PIPELINE_SECRETS:arn:aws:secretsmanager:ap-southeast-1:634277304418:secret:nodejs_github_actions-NGJETp
           parse-json-secrets: true
 
       # SonarQube Scan Step
@@ -118,7 +118,7 @@ jobs:
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: |
-            PIPELINE_SECRETS:nodejs_github_actions
+            PIPELINE_SECRETS:arn:aws:secretsmanager:ap-southeast-1:634277304418:secret:nodejs_github_actions-NGJETp
           parse-json-secrets: true
 
       - name: Login to DockerHub
@@ -157,7 +157,7 @@ jobs:
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: |
-            PIPELINE_SECRETS:nodejs_github_actions
+            PIPELINE_SECRETS:arn:aws:secretsmanager:ap-southeast-1:634277304418:secret:nodejs_github_actions-NGJETp
           parse-json-secrets: true
 
       - name: Setup SSH private key
