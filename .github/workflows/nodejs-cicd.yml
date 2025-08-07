@@ -65,7 +65,7 @@ jobs:
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: |
-            SONAR_CREDENTIALS:nodejs_github_actions
+            nodejs_github_actions
           parse-json-secrets: true
 
       - name: SonarQube Scan
@@ -107,7 +107,7 @@ jobs:
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: |
-            DOCKERHUB_CREDENTIALS:nodejs_github_actions
+            nodejs_github_actions
           parse-json-secrets: true
 
       - name: Login to DockerHub
