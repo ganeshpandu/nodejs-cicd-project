@@ -25,9 +25,9 @@ jobs:
     needs: compile
     steps:
       - uses: actions/checkout@v4
-      - name: Trivy FS Scan
+      - name: Trivy FS Scan (via Docker)
         run: docker run --rm -v $(pwd):/project aquasec/trivy fs /project
-      - name: Gitleaks Code Scan
+      - name: Gitleaks Code Scan (via Docker)
         run: docker run --rm -v $(pwd):/app zricethezav/gitleaks:latest detect --source=/app --report-format=json --report-path=/app/gitleaks-report.json
 
   test:
@@ -57,23 +57,22 @@ jobs:
           aws-region: ap-southeast-1
           role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
 
-      - name: Get secrets from AWS Secrets Manager
-        id: pipeline_secrets
+      - name: Get Sonar secrets from AWS Secrets Manager
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
-          secret-ids: |
-            PIPELINE_SECRETS:arn:aws:secretsmanager:ap-southeast-1:634277304418:secret:nodejs_github_actions-NGJETp
-          parse-json-secrets: true
+          secrets: |
+            SONAR_TOKEN,nodejs_github_actions:SONAR_TOKEN
+            SONAR_HOST_URL,nodejs_github_actions:SONAR_HOST_URL
 
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@master
         with:
           projectBaseDir: .
         env:
-          SONAR_TOKEN: ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
 
-      - name: Install jq
+      - name: Install jq locally
         run: |
           curl -L -o jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
           chmod +x jq
@@ -84,8 +83,8 @@ jobs:
         with:
           pollingTimeoutSec: 600
         env:
-          SONAR_TOKEN: ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
 
   docker_build_and_push:
     runs-on: ec2-hosted
@@ -93,57 +92,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials for Secrets Manager access
         uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-region: ap-southeast-1
           role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
 
-      - name: Get secrets from AWS Secrets Manager
-        id: pipeline_secrets
+      - name: Get DockerHub secrets from AWS Secrets Manager
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
-          secret-ids: |
-            PIPELINE_SECRETS:arn:aws:secretsmanager:ap-southeast-1:634277304418:secret:nodejs_github_actions-NGJETp
-          parse-json-secrets: true
+          secrets: |
+            DOCKERHUB_USERNAME,nodejs_github_actions:DOCKERHUB_USERNAME
+            DOCKERHUB_TOKEN,nodejs_github_actions:DOCKERHUB_TOKEN
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
-          username: ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_USERNAME }}
-          password: ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_TOKEN }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
 
-      - name: Build and Tag Docker Image
+      - name: Build Docker Image with version tag
         run: |
-          docker build -t ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest .
-          docker tag ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:${{ github.sha }}
+          docker build -t ${{ env.DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest .
+          docker tag ${{ env.DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest ${{ env.DOCKERHUB_USERNAME }}/nodejs-cicd-app:${{ github.sha }}
 
       - name: Trivy Image Scan
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image ${{ env.DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
 
       - name: Push Docker Image
         run: |
-          docker push ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
-          docker push ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:${{ github.sha }}
+          docker push ${{ env.DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
+          docker push ${{ env.DOCKERHUB_USERNAME }}/nodejs-cicd-app:${{ github.sha }}
 
   deploy_to_ec2:
     runs-on: ubuntu-latest
     needs: docker_build_and_push
     steps:
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials for Secrets Manager access
         uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-region: ap-southeast-1
           role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
 
-      - name: Get secrets from AWS Secrets Manager
-        id: pipeline_secrets
+      - name: Get DockerHub and app secrets from AWS Secrets Manager
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
-          secret-ids: |
-            PIPELINE_SECRETS:arn:aws:secretsmanager:ap-southeast-1:634277304418:secret:nodejs_github_actions-NGJETp
-          parse-json-secrets: true
+          secrets: |
+            DOCKERHUB_USERNAME,nodejs_github_actions:DOCKERHUB_USERNAME
+            DOCKERHUB_TOKEN,nodejs_github_actions:DOCKERHUB_TOKEN
+            DB_URL,nodejs_github_actions:DB_URL
+            API_KEY,nodejs_github_actions:API_KEY
 
       - name: Setup SSH private key
         run: |
@@ -151,11 +150,17 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      - name: Deploy to EC2
+      - name: Deploy to EC2 via SSH and run container
+        env:
+          DB_URL: ${{ env.DB_URL }}
+          API_KEY: ${{ env.API_KEY }}
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP }} "
-            docker pull ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
+            docker login -u ${{ env.DOCKERHUB_USERNAME }} -p ${{ env.DOCKERHUB_TOKEN }}
+            docker pull ${{ env.DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
             docker stop nodeapp || true && docker rm nodeapp || true
             docker run -d -p 3000:3000 --restart unless-stopped --name nodeapp \
-              ${{ steps.pipeline_secrets.outputs.PIPELINE_SECRETS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
+              -e DB_URL=\$DB_URL \
+              -e API_KEY=\$API_KEY \
+              ${{ env.DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
           "
