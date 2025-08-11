@@ -60,6 +60,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
 
       - name: Get secrets from AWS Secrets Manager
+        id: nodejs_secret
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: nodejs_github_actions
@@ -100,6 +101,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
 
       - name: Get secrets from AWS Secrets Manager
+        id: nodejs_secret
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: nodejs_github_actions
@@ -136,6 +138,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
 
       - name: Get secrets from AWS Secrets Manager
+        id: nodejs_secret
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
           secret-ids: nodejs_github_actions
@@ -144,12 +147,12 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ env.NODEJS_GITHUB_ACTIONS_EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
       - name: Deploy via SSH
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP }} "
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.nodejs_secret.outputs.nodejs_secret_EC2_IP }} "
             docker pull ${{ env.NODEJS_GITHUB_ACTIONS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
             docker stop nodeapp || true && docker rm nodeapp || true
             docker run -d -p 3000:3000 --restart unless-stopped --name nodeapp \
