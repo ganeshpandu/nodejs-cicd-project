@@ -63,8 +63,7 @@ jobs:
         id: nodejs_secret
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
-          secret-ids: |
-            nodejs_github_actions-NGJETp
+          secret-ids: nodejs_github_actions
           parse-json-secrets: true
 
       - name: SonarQube Scan
@@ -105,8 +104,7 @@ jobs:
         id: nodejs_secret
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
-          secret-ids: |
-            nodejs_github_actions-NGJETp
+          secret-ids: nodejs_github_actions
           parse-json-secrets: true
 
       - name: Login to DockerHub
@@ -143,8 +141,7 @@ jobs:
         id: nodejs_secret
         uses: aws-actions/aws-secretsmanager-get-secrets@v1
         with:
-          secret-ids: |
-            nodejs_github_actions-NGJETp
+          secret-ids: nodejs_github_actions
           parse-json-secrets: true
 
       - name: Setup SSH key
