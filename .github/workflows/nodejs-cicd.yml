@@ -57,7 +57,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-region: ap-southeast-1
-          role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
 
       - name: Get secrets from AWS Secrets Manager
         id: nodejs_secret
@@ -99,7 +99,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-region: ap-southeast-1
-          role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
 
       - name: Get secrets from AWS Secrets Manager
         id: nodejs_secret
@@ -137,7 +137,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-region: ap-southeast-1
-          role-to-assume: arn:aws:iam::634277304418:role/nodejs-cicd-role
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
 
       - name: Get secrets from AWS Secrets Manager
         id: nodejs_secret
