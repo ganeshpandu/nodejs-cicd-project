@@ -144,17 +144,15 @@ jobs:
           secret-ids: nodejs_github_actions
           parse-json-secrets: true
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ env.NODEJS_GITHUB_ACTIONS_EC2_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
-      - name: Deploy via SSH
+      - name: Deploy via SSH password auth
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ env.NODEJS_GITHUB_ACTIONS_EC2_IP }} "
-            docker pull ${{ env.NODEJS_GITHUB_ACTIONS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
-            docker stop nodeapp || true && docker rm nodeapp || true
+          sshpass -p "${{ env.NODEJS_GITHUB_ACTIONS_EC2_PASSWORD }}" ssh -o StrictHostKeyChecking=no ubuntu@${{ env.NODEJS_GITHUB_ACTIONS_EC2_IP }} "
+            docker pull ${{ env.NODEJS_GITHUB_ACTIONS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest &&
+            docker stop nodeapp || true &&
+            docker rm nodeapp || true &&
             docker run -d -p 3000:3000 --restart unless-stopped --name nodeapp \
               ${{ env.NODEJS_GITHUB_ACTIONS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
           "
