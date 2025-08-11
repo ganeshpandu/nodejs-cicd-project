@@ -152,7 +152,7 @@ jobs:
 
       - name: Deploy via SSH
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.nodejs_secret.outputs.nodejs_secret_EC2_IP }} "
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ env.NODEJS_GITHUB_ACTIONS_EC2_IP }} "
             docker pull ${{ env.NODEJS_GITHUB_ACTIONS_DOCKERHUB_USERNAME }}/nodejs-cicd-app:latest
             docker stop nodeapp || true && docker rm nodeapp || true
             docker run -d -p 3000:3000 --restart unless-stopped --name nodeapp \
