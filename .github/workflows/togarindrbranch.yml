@@ -1,4 +1,4 @@
-name: CI/CD Pipeline....
+name: CI/CD Pipeline
 
 on:
   push:
@@ -34,6 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Load environment variables from secret
       - name: Load .env from Secrets
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
@@ -41,14 +42,19 @@ jobs:
           source .env
           set +a
 
+      # ✅ Authenticate to Google Cloud safely
       - name: Authenticate to Google Cloud
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
-          echo "$GCP_SA_KEY" > gcp-key.json
+          # Decode base64 if needed, or fallback to plain JSON
+          echo "$GCP_SA_KEY" | base64 --decode > gcp-key.json 2>/dev/null || echo "$GCP_SA_KEY" > gcp-key.json
+
+          # Activate service account and configure Artifact Registry auth
           gcloud auth activate-service-account --key-file=gcp-key.json
           gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
 
+      # Build & tag Docker image
       - name: Build and Tag Docker Image
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
@@ -61,11 +67,13 @@ jobs:
           docker build -t $IMAGE_NAME:latest .
           docker tag $IMAGE_NAME:latest $IMAGE_NAME:${{ github.sha }}
 
+      # Run Trivy security scan
       - name: Trivy Image Scan
         run: |
           IMAGE_NAME="${{ secrets.GCP_REGION }}-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image $IMAGE_NAME:latest
 
+      # Push image to Google Artifact Registry
       - name: Push Docker Image to Artifact Registry
         run: |
           IMAGE_NAME="${{ secrets.GCP_REGION }}-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
