@@ -47,7 +47,7 @@ jobs:
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
-          printf "%s" "$GCP_SA_KEY" | base64 --decode > gcp-key.json 2>/dev/null || printf "%s" "$GCP_SA_KEY" > gcp-key.json
+          echo "$GCP_SA_KEY" > gcp-key.json
           gcloud auth activate-service-account --key-file=gcp-key.json
           gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
 
