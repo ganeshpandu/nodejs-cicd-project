@@ -34,14 +34,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Load environment variables from secret
       - name: Load .env from Secrets
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
           set -a
           source .env
           set +a
-      # ✅ Authenticate to Google Cloud safely
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
       - name: Authenticate to Google Cloud
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
@@ -50,33 +52,24 @@ jobs:
           echo "$GCP_SA_KEY" | base64 --decode > gcp-key.json 2>/dev/null || echo "$GCP_SA_KEY" > gcp-key.json
           gcloud auth activate-service-account --key-file=gcp-key.json
           gcloud auth configure-docker "$GCP_REGION-docker.pkg.dev" --quiet
-      # Build & tag Docker image
-      - name: Build and Tag Docker Image
+
+      - name: Build and Push Docker Image
         env:
           GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GAR_REPO: ${{ secrets.GAR_REPO }}
         run: |
-          echo "${{ secrets.ENV_FILE }}" > .env
-          set -a
-          source .env
-          set +a
-          IMAGE_NAME="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
-          docker build -t $IMAGE_NAME:latest .
-          docker tag $IMAGE_NAME:latest $IMAGE_NAME:${{ github.sha }}
-      # Run Trivy security scan
+          IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
+          docker buildx build --push -t $IMAGE_URI:latest -t $IMAGE_URI:${{ github.sha }} .
+
       - name: Trivy Image Scan
         env:
           GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GAR_REPO: ${{ secrets.GAR_REPO }}
         run: |
-          IMAGE_NAME="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image $IMAGE_NAME:latest
-      # Push image to Google Artifact Registry
-      - name: Push Docker Image to Artifact Registry
-        env:
-          GCP_REGION: ${{ secrets.GCP_REGION }}
-        run: |
-          IMAGE_NAME="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
-          docker push $IMAGE_NAME:latest
-          docker push $IMAGE_NAME:${{ github.sha }}
+          IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image $IMAGE_URI:latest
 
   deploy_to_local:
     runs-on: self-hosted
@@ -86,18 +79,24 @@ jobs:
         run: |
           docker ps -q --filter "name=nodeapp" | grep -q . && \
           docker stop nodeapp && docker rm nodeapp || echo "No container to stop"
+
       - name: Pull Latest Docker Image
         env:
           GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GAR_REPO: ${{ secrets.GAR_REPO }}
         run: |
-          IMAGE_NAME="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
-          docker pull $IMAGE_NAME:latest
+          IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
+          docker pull $IMAGE_URI:latest
+
       - name: Run New Container with Restart Policy
         env:
           GCP_REGION: ${{ secrets.GCP_REGION }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GAR_REPO: ${{ secrets.GAR_REPO }}
         run: |
-          IMAGE_NAME="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
+          IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
           docker run -d -p 80:3000 \
             --restart unless-stopped \
             --name nodeapp \
-            $IMAGE_NAME:latest
+            $IMAGE_URI:latest
