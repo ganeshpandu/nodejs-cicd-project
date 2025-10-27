@@ -2,11 +2,12 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ "none" ]
+    branches: 
+      - main
 
 jobs:
   compile:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,7 +17,7 @@ jobs:
         run: npm ci
 
   test:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: compile
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +30,7 @@ jobs:
         run: npm test
 
   docker_build_and_push:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v4
@@ -79,7 +80,7 @@ jobs:
           docker push $IMAGE_NAME:${{ github.sha }}
 
   deploy_to_local:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: docker_build_and_push
     steps:
       - name: Stop Existing Container (if any)
