@@ -10,15 +10,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
+      # 1️⃣ Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Load config.json from secret
-      - name: Load GCP Config from Secret
+      # 2️⃣ Read config.json from GitHub secret
+      - name: Load GCP Config
         run: |
           echo "Reading config from MY_JSON_SECRET..."
-          echo '${{ secrets.MY_JSON_SECRET }}' | tr -d '\r' | jq . > config.json
+          echo '${{ secrets.MY_JSON_SECRET }}' | jq . > config.json
           echo "✅ Config file created:"
           cat config.json
 
@@ -28,12 +28,12 @@ jobs:
           echo "GAR_REPO=$GAR_REPO" >> $GITHUB_ENV
           echo "GCP_REGION=$GCP_REGION" >> $GITHUB_ENV
 
-          # Set GCP_PROJECT_ID directly (from SA key)
+          # Extract project ID from service account key
           PROJECT_ID=$(echo '${{ secrets.GCP_SA_KEY }}' | jq -r '.project_id')
           echo "GCP_PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
 
-      # 3️⃣ Authenticate with GCP using Service Account Key
-      - name: Set up GCP authentication
+      # 3️⃣ Authenticate with GCP
+      - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
@@ -43,7 +43,7 @@ jobs:
         run: |
           gcloud auth configure-docker $GCP_REGION-docker.pkg.dev --quiet
 
-      # 5️⃣ Build and Push Docker Image
+      # 5️⃣ Build & Push Docker Image
       - name: Build and Push Docker Image
         run: |
           IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
