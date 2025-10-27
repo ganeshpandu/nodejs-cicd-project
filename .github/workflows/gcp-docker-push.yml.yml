@@ -1,4 +1,4 @@
-name: Build and Push to GCP Artifact Registry ..
+name: Build and Push to GCP Artifact Registry
 
 on:
   push:
@@ -10,54 +10,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository
-      - name: Checkout Code
+      # 1️⃣ Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Create config.json from GitHub Secret
-      - name: Load GCP Config
+      # 2️⃣ Load config.json from secret
+      - name: Load GCP Config from Secret
         run: |
-          echo "${{ secrets.MY_JSON_SECRET }}" > config.json
-          echo "✅ Config file created"
+          echo "Reading config from MY_JSON_SECRET..."
+          echo '${{ secrets.MY_JSON_SECRET }}' | tr -d '\r' | jq . > config.json
+          echo "✅ Config file created:"
           cat config.json
 
-          GCP_PROJECT_ID=$(jq -r '.GCP_PROJECT_ID' config.json)
-          GCP_REPO_NAME=$(jq -r '.GCP_REPO_NAME' config.json)
+          GAR_REPO=$(jq -r '.GAR_REPO' config.json)
+          GCP_REGION=$(jq -r '.GCP_REGION' config.json)
 
-          echo "GCP_PROJECT_ID=$GCP_PROJECT_ID" >> $GITHUB_ENV
-          echo "GCP_REPO_NAME=$GCP_REPO_NAME" >> $GITHUB_ENV
-          echo "GCP_REGION=us-central1" >> $GITHUB_ENV
+          echo "GAR_REPO=$GAR_REPO" >> $GITHUB_ENV
+          echo "GCP_REGION=$GCP_REGION" >> $GITHUB_ENV
 
-      # Step 3: Authenticate with Google Cloud
+          # Set GCP_PROJECT_ID directly (from SA key)
+          PROJECT_ID=$(echo '${{ secrets.GCP_SA_KEY }}' | jq -r '.project_id')
+          echo "GCP_PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+
+      # 3️⃣ Authenticate with GCP using Service Account Key
       - name: Set up GCP authentication
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # Step 4: Configure Docker to use Artifact Registry credentials
+      # 4️⃣ Configure Docker for Artifact Registry
       - name: Configure Docker for Artifact Registry
         run: |
           gcloud auth configure-docker $GCP_REGION-docker.pkg.dev --quiet
 
-      # Step 5: Build and push Docker image
+      # 5️⃣ Build and Push Docker Image
       - name: Build and Push Docker Image
         run: |
-          IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME/nodejs-cicd-app"
-
-          echo "Building Docker image: $IMAGE_URI"
+          IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPO/nodejs-cicd-app"
+          echo "🚀 Building and pushing image: $IMAGE_URI"
 
           docker build -t $IMAGE_URI:latest .
           docker push $IMAGE_URI:latest
 
-          # Optional: Tag with commit SHA
           SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
           docker tag $IMAGE_URI:latest $IMAGE_URI:$SHORT_SHA
           docker push $IMAGE_URI:$SHORT_SHA
 
-          echo "✅ Docker image pushed successfully to $IMAGE_URI"
-
-      # Step 6: Verify image in registry
-      - name: Verify Pushed Image
-        run: |
-          echo "Listing images in GAR..."
-          gcloud artifacts docker images list $GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_REPO_NAME
+          echo "✅ Image pushed successfully to: $IMAGE_URI"
